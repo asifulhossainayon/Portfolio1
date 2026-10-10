@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Ayon Tech HQ — 3D Office Portfolio</title>
+<style>
+:root{--fg:#f4f4f7;--ac:#e8b04a;--bg:rgba(12,14,22,.9);--bd:rgba(255,255,255,.16);box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+html,body{height:100%;margin:0;overflow:hidden;background:#0b0d14;color:var(--fg);font:15px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+canvas{position:fixed;inset:0;display:block}
+button,input,select,textarea{font:inherit;color:inherit}
+.btn{background:rgba(255,255,255,.08);border:1px solid var(--bd);padding:9px 14px;border-radius:10px;cursor:pointer;margin:4px 6px 0 0;text-decoration:none;display:inline-block}
+.btn:hover,.btn.p{background:var(--ac);color:#111;border-color:var(--ac)}
+#say{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(14px + env(safe-area-inset-bottom,0px));width:min(680px,94vw);background:var(--bg);border:1px solid var(--bd);border-radius:16px;padding:14px 18px;backdrop-filter:blur(8px);display:none}
+#say b{color:var(--ac);display:block;font-size:12px;letter-spacing:.1em;text-transform:uppercase}
+#panel{position:fixed;inset:calc(12px + env(safe-area-inset-top,0px)) 12px auto 12px;margin:auto;max-width:620px;max-height:calc(100% - 150px);overflow:auto;background:var(--bg);border:1px solid var(--bd);border-radius:16px;padding:18px;display:none;backdrop-filter:blur(8px)}
+#panel h2{margin:0 0 8px}
+input,select,textarea{width:100%;box-sizing:border-box;background:rgba(255,255,255,.07);border:1px solid var(--bd);border-radius:10px;padding:9px;margin:4px 0 8px}
+select option{color:#111}
+.bar{height:8px;background:rgba(255,255,255,.12);border-radius:5px;margin:3px 0 10px}.bar i{display:block;height:100%;background:var(--ac);border-radius:5px}
+.card{border:1px solid var(--bd);border-radius:12px;padding:10px 12px;margin:8px 0}
+.tbl{font-size:13px;overflow-x:auto}
+#intro{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;background:linear-gradient(#0b0d14cc,#0b0d14f2);padding:20px}
+#intro h1{font-size:clamp(28px,6vw,52px);margin:0}#intro h1 span{color:var(--ac)}
+#adm{position:fixed;left:10px;top:calc(10px + env(safe-area-inset-top,0px));opacity:.5;font-size:12px;padding:6px 10px}
+#ld{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:#0b0d14;z-index:9}
+</style></head><body>
+<div id="ld">Building the office…</div>
+<div id="intro" style="display:none"><h1>AYON <span>TECH</span> HQ</h1><p style="max-width:460px;opacity:.8">A walk-through 3D office portfolio. Meet security, talk to reception, explore projects, skills — or book the CEO.</p><button class="btn p" id="go">Enter the Office →</button></div>
+<button class="btn" id="adm">🔒 Admin</button>
+<div id="panel"></div>
+<div id="say"><b id="who"></b><div id="txt"></div><div id="opts"></div></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+/* ===== EDIT YOUR DETAILS HERE ===== */
+const CEO={name:'Asiful Hossain Ayon',phone:'+8801410413707',wa:'8801615638028',mail:'asifulhossainayon1@gmail.com',gh:'asifulhossainayon',
+fb:'https://www.facebook.com/share/1BbXwGcpHH/?mibextid=wwXIfr',
+ig:'https://www.instagram.com/wednesnightt?psln=N3l2cmRwcW5wdmNs&utm_source=qr'};
+const PROJECTS=[{n:'Project Website 1',d:'Replace with your real project description.',u:'https://github.com/'+CEO.gh},{n:'Project Website 2',d:'Replace with your real project description.',u:'https://github.com/'+CEO.gh},{n:'Project Website 3',d:'Replace with your real project description.',u:'https://github.com/'+CEO.gh}];
+const SKILLS=[['HTML',92],['CSS',90],['JavaScript',85],['Python',85],['Java',80]];
+const ADMIN_HASH='d522faa8744c5e65f0c4532d73600c87856ab10e7ae1fed6595e704375fc8f63';
+/* ================================== */
+const $=s=>document.querySelector(s);
+const ls=(k,v)=>{try{if(v===undefined)return localStorage.getItem(k);localStorage.setItem(k,v)}catch(e){return null}};
+let DB=null;(async()=>{try{if(window.claude)DB=await claude.use('db')}catch(e){}})();
+function save(kind,o){o.t=Date.now();let a=[];try{a=JSON.parse(ls('ao_'+kind)||'[]')}catch(e){}a.push(o);ls('ao_'+kind,JSON.stringify(a));try{DB&&Promise.resolve(DB.collection(kind).add(o)).catch(()=>{})}catch(e){}}
+
+/* ---------- three.js basics ---------- */
+const R=new THREE.WebGLRenderer({antialias:true});R.setPixelRatio(Math.min(devicePixelRatio,2));document.body.prepend(R.domElement);
+const S=new THREE.Scene();S.background=new THREE.Color(0x9fd0f5);S.fog=new THREE.Fog(0x9fd0f5,60,220);
+const C=new THREE.PerspectiveCamera(62,1,.1,400);
+S.add(new THREE.HemisphereLight(0xffffff,0x8a7f70,.95));
+const sun=new THREE.DirectionalLight(0xffffff,.55);sun.position.set(30,50,20);S.add(sun);
+[[0,4,6],[0,4,-12],[0,4,-32]].forEach(p=>{const l=new THREE.PointLight(0xffe3b0,.55,30);l.position.set(...p);S.add(l)});
+const M=(c,o={})=>new THREE.MeshStandardMaterial(Object.assign({color:c,roughness:.55,metalness:.1},o));
+const MB=c=>new THREE.MeshBasicMaterial({color:c});
+function box(w,h,d,x,y,z,m,p=S){const o=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),m);o.position.set(x,y,z);p.add(o);return o}
+function cyl(r,h,x,y,z,m,p=S,s=14){const o=new THREE.Mesh(new THREE.CylinderGeometry(r,r,h,s),m);o.position.set(x,y,z);p.add(o);return o}
+function ball(r,x,y,z,m,p=S){const o=new THREE.Mesh(new THREE.SphereGeometry(r,14,10),m);o.position.set(x,y,z);p.add(o);return o}
+function cv(w,h,f){const c=document.createElement('canvas');c.width=w;c.height=h;f(c.getContext('2d'),c);return new THREE.CanvasTexture(c)}
+const wood=M(0x4a2c1a,{roughness:.35}),dark=M(0x15181f,{roughness:.4}),gold=M(0xd4a73a,{metalness:.8,roughness:.25}),glass=M(0x9fd8ff,{transparent:true,opacity:.16,roughness:.05,metalness:.6});
+
+/* ---------- people ---------- */
+function person(shirt,hair,o={}){const g=new THREE.Group(),sk=M(o.skin||0xf0c8a4),pm=M(o.pants||0x222b3a),sm=M(shirt);
+ box(.5,.7,.28,0,1.15,0,sm,g);ball(.17,0,1.7,0,sk,g);
+ const h=new THREE.Mesh(new THREE.SphereGeometry(.185,14,10,0,6.3,0,1.9),M(hair));h.position.set(0,1.72,-.01);g.add(h);
+ if(o.long)box(.36,.5,.1,0,1.5,-.14,M(hair),g);
+ if(o.shades)box(.3,.06,.05,0,1.73,.16,MB(0x000000),g);
+ if(o.tie)box(.07,.4,.02,0,1.15,.15,MB(0xaa1111),g);
+ if(o.skirt)box(.56,.4,.34,0,.8,0,sm,g);
+ const arm=x=>{const a=new THREE.Group();a.position.set(x,1.45,0);box(.12,.6,.12,0,-.28,0,sm,a);ball(.07,0,-.6,0,sk,a);g.add(a);return a};
+ const leg=x=>{const a=new THREE.Group();a.position.set(x,.8,0);box(.17,.8,.17,0,-.4,0,pm,a);g.add(a);return a};
+ g.userData={aL:arm(-.33),aR:arm(.33),lL:leg(-.12),lR:leg(.12)};S.add(g);return g}
+
+/* ---------- textures ---------- */
+const codeTex=cv(128,256,(x)=>{x.fillStyle='#07131f';x.fillRect(0,0,128,256);const k=['#4ade80','#60a5fa','#f472b6','#facc15'];for(let i=0;i<30;i++){x.fillStyle=k[i%4];x.fillRect(6+(i%3)*8,i*8+2,10+Math.random()*85,3)}});
+codeTex.wrapS=codeTex.wrapT=THREE.RepeatWrapping;codeTex.repeat.set(1,.5);
+const winTex=cv(64,128,(x)=>{x.fillStyle='#1b2433';x.fillRect(0,0,64,128);for(let i=0;i<8;i++)for(let j=0;j<16;j++){x.fillStyle=Math.random()>.45?'#fde68a':'#3a4558';x.fillRect(i*8+1,j*8+1,5,5)}});
+const screenMat=new THREE.MeshBasicMaterial({map:codeTex});
+const signTex=cv(512,96,(x)=>{x.fillStyle='#10131c';x.fillRect(0,0,512,96);x.fillStyle='#e8b04a';x.font='bold 54px system-ui';x.textAlign='center';x.fillText('AYON TECH HQ',256,66)});
+
+/* ---------- building ---------- */
+box(400,.1,400,0,-.25,-30,M(0x80858f));
+box(28,.2,58,0,-.1,-15,M(0xeceae4,{roughness:.15,metalness:.35}));
+box(28,.2,58,0,5.1,-15,M(0xf5f5f7));
+for(let z=10;z>-44;z-=6)box(24,.04,.5,0,4.97,z,MB(0xfff6dd));
+// glass walls (left, right, back, front w/ door)
+box(.1,5,58,-14,2.5,-15,glass);box(.1,5,58,14,2.5,-15,glass);box(28,5,.1,0,2.5,-44,glass);
+box(10,5,.1,-9,2.5,15,glass);box(10,5,.1,9,2.5,15,glass);box(8,1,.1,0,4.5,15,dark);
+[-14,14].forEach(x=>{for(let z=-44;z<=15;z+=7.3)box(.25,5,.25,x,2.5,z,dark)});
+// partition lobby/office? (open plan) + CEO wall at z=-20 with grand door
+box(10,5,.3,-9,2.5,-20,M(0xefe9df));box(10,5,.3,9,2.5,-20,M(0xefe9df));box(8,1,.3,0,4.5,-20,M(0xefe9df));
+box(.15,4,.15,-4,2,-20,gold);box(.15,4,.15,4,2,-20,gold);
+// hanging sign
+box(9,1.4,.15,0,3.8,-7,dark);const sg=new THREE.Mesh(new THREE.PlaneGeometry(8.6,1.1),new THREE.MeshBasicMaterial({map:signTex}));sg.position.set(0,3.8,-6.9);S.add(sg);
+// lobby
+cyl(5.5,.04,0,.02,6,M(0x23304a),S,40);cyl(4.5,.05,0,.03,6,M(0x2d3f63),S,40);
+[[-9,3,Math.PI/2],[9,3,-Math.PI/2],[-9,8,Math.PI/2],[9,8,-Math.PI/2]].forEach(([x,z,r])=>{const s=new THREE.Group();s.position.set(x,0,z);s.rotation.y=r;box(3,.5,1.1,0,.3,0,M(0x2b3a55),s);box(3,.7,.3,0,.8,-.45,M(0x2b3a55),s);S.add(s)});
+[[-12.5,12],[12.5,12],[-12.5,-6],[12.5,-6]].forEach(([x,z])=>{cyl(.4,.6,x,.3,z,M(0xcfc6b8));cyl(.06,1,x,1,z,M(0x4a3b2a));ball(.7,x,1.8,z,M(0x2f8f4e))});
+// reception desk
+box(7,1.1,1.4,0,.55,-3,wood);box(7.3,.08,1.7,0,1.12,-3,gold);box(7,.9,.1,0,.6,-2.25,M(0x241209));
+box(.8,.5,.05,-1.8,1.5,-3.2,dark);const rm=new THREE.Mesh(new THREE.PlaneGeometry(.72,.42),screenMat);rm.position.set(-1.8,1.5,-3.17);S.add(rm);
+// FBI guards + receptionist
+const G1=person(0x0c0c10,0x111111,{shades:1,tie:1,pants:0x0c0c10}),G2=person(0x0c0c10,0x2a1a10,{shades:1,tie:1,pants:0x0c0c10,skin:0xc99a74});
+G1.position.set(-2.4,0,8.5);G2.position.set(2.4,0,8.5);G1.rotation.y=.25;G2.rotation.y=-.25;
+[G1,G2].forEach(g=>{box(.18,.1,.02,.16,1.3,.15,MB(0xe8b04a),g)});
+const girl=person(0xc23a4f,0x3b2314,{long:1,skirt:1,pants:0x15151a});girl.position.set(0,0,-4.4);girl.userData.path=[];
+// employees
+const emps=[],cols=[0x3b82f6,0x10b981,0xf59e0b,0x8b5cf6,0xef4444,0x14b8a6,0xec4899,0x64748b,0x84cc16,0x0ea5e9];
+function ws(x,z,i,staff){box(2,.08,1,x,.75,z,staff?M(0xd9d4c8):wood);box(.08,.75,.9,x-.9,.37,z,dark);box(.08,.75,.9,x+.9,.37,z,dark);
+ box(.9,.55,.05,x,1.15,z-.2,dark);const s=new THREE.Mesh(new THREE.PlaneGeometry(.82,.47),screenMat);s.position.set(x,1.15,z-.17);S.add(s);box(.08,.2,.08,x,.9,z-.2,dark);
+ box(.6,.08,.6,x,.5,z+.75,dark);box(.6,.7,.08,x,.9,z+1.05,dark);cyl(.05,.45,x,.25,z+.75,dark);
+ const p=person(cols[i%10],i%3?0x2a1a10:0xd8b060,{long:i%4==1,skin:i%2?0xe0b08a:0xf3d0b0});p.position.set(x,-.25,z+.75);p.rotation.y=Math.PI;p.userData.ph=i;emps.push(p)}
+let ei=0;[-11,-8,8,11].forEach(x=>[-10,-13.5,-17].forEach(z=>ws(x,z,ei++)));
+// CEO room
+box(8,.03,23,0,.02,-32.5,M(0xa3121f,{roughness:.9}));box(8.4,.03,.25,0,.03,-21,gold);box(.25,.03,23,-4.1,.03,-32.5,gold);box(.25,.03,23,4.1,.03,-32.5,gold);
+box(5.4,.12,1.9,0,.85,-39,wood);box(5,.8,.1,0,.4,-38.1,M(0x241209));box(.1,.8,1.8,-2.5,.4,-39,wood);box(.1,.8,1.8,2.5,.4,-39,wood);
+[-1.4,0,1.4].forEach(x=>{box(1.1,.65,.05,x,1.4,-39.6,dark);const s=new THREE.Mesh(new THREE.PlaneGeometry(1,.55),screenMat);s.position.set(x,1.4,-39.57);S.add(s)});
+box(.9,.06,.25,0,.95,-38.4,gold);
+box(.9,.1,.8,0,.55,-41,M(0x8d1b1b));box(.9,1.2,.12,0,1.1,-41.5,M(0x8d1b1b));
+const ceo=person(0x1a1d38,0x101010,{tie:1,pants:0x1a1d38,skin:0xe8bd98});ceo.position.set(0,-.25,-41);
+[-1.2,1.2].forEach(x=>{box(.9,.1,.9,x,.45,-35.5,M(0x2b3a55));box(.9,.8,.1,x,.9,-34.9,M(0x2b3a55))});
+for(let i=0;i<12;i++){box(1,3.2,.9,-13.2,1.6,-23-i*1.5,dark);for(let k=0;k<7;k++){const l=box(.07,.05,.03,-12.68,.6+k*.38,-23-i*1.5+(i%2?.2:-.2),MB(k%2?0x22d3ee:0x4ade80));(window.leds=window.leds||[]).push(l)}}
+ws(8,-26,3,1);ws(11,-26,4,1);ws(8,-30,5,1);ws(11,-30,6,1);ws(8,-34,7,1);ws(11,-34,8,1);ws(8,-38,9,1);ws(11,-38,0,1);
+const ch=new THREE.Mesh(new THREE.TorusGeometry(1.3,.06,8,32),gold);ch.rotation.x=Math.PI/2;ch.position.set(0,4.2,-32);S.add(ch);
+for(let i=0;i<10;i++){const a=i/10*6.28;ball(.1,Math.cos(a)*1.3,4.1,-32+Math.sin(a)*1.3,MB(0xfff2c0))}
+box(3,1.8,.08,-9,2.6,-43.8,M(0x1d2b4f));box(3,1.8,.08,9,2.6,-43.8,M(0x4f1d2b));
+
+/* ---------- outside: city, roads, garden ---------- */
+const roadM=M(0x23262d,{roughness:.9}),walkM=M(0xb9bcc4);
+box(260,.05,9,0,0,-54,roadM);box(260,.12,3,0,0,-48.5,walkM);for(let x=-120;x<120;x+=8)box(3,.06,.2,x,.04,-54,MB(0xf5f5f5));
+box(9,.05,260,-26,0,-40,roadM);box(3,.12,260,-18.5,0,-40,walkM);for(let z=-160;z<80;z+=8)box(.2,.06,3,-26,.04,z,MB(0xf5f5f5));
+for(let i=0;i<70;i++){const h=10+Math.random()*50,w=6+Math.random()*8,d=6+Math.random()*8;let x,z;if(i<45){x=-130+i*6;z=-62-Math.random()*60}else{x=-45-Math.random()*70;z=40-(i-45)*8}
+ const b=box(w,h,d,x,h/2,z,new THREE.MeshStandardMaterial({map:winTex,color:new THREE.Color().setHSL(.55+Math.random()*.1,.2,.55+Math.random()*.4),roughness:.6}))}
+function car(c){const g=new THREE.Group();box(2.3,.55,1.05,0,.5,0,M(c,{metalness:.6,roughness:.3}),g);box(1.2,.45,.95,-.1,.98,0,M(0x1b2530,{metalness:.7,roughness:.1}),g);
+ [[-.7,.5],[.7,.5],[-.7,-.5],[.7,-.5]].forEach(([x,z])=>{const w=cyl(.27,.2,x,.27,z,MB(0x111111),g);w.rotation.x=Math.PI/2});S.add(g);return g}
+const cars=[],walkers=[];
+for(let i=0;i<10;i++){const c=car([0xe11d48,0xfacc15,0x2563eb,0xf5f5f5,0x16a34a][i%5]),back=i<6,d=i%2?1:-1;c.userData={back,d,sp:7+Math.random()*7};
+ if(back){c.position.set(-100+Math.random()*200,0,d>0?-55.8:-52.2);c.rotation.y=d>0?0:Math.PI}else{c.position.set(d>0?-27.8:-24.2,0,-100+Math.random()*180);c.rotation.y=d>0?-Math.PI/2:Math.PI/2}cars.push(c)}
+for(let i=0;i<12;i++){const p=person(cols[i%10],0x2a1a10,{long:i%3==0});const back=i<7,d=i%2?1:-1;p.userData.w={back,d,sp:1.5+Math.random()};
+ if(back)p.position.set(-60+Math.random()*120,.1,-48.5);else p.position.set(-18.5,.1,-60+Math.random()*100);walkers.push(p)}
+// garden (right side)
+box(80,.1,120,54,-.12,-25,M(0x4caf50,{roughness:1}));
+box(11,.04,23,30,0,-6,M(0x2f6fb0));[[0,-11.5,11,.12],[0,11.5,11,.12]].forEach(([x,z,w,d])=>box(w,.05,d,30+x,.03,-6+z,MB(0xffffff)));box(.12,.05,23,24.5,.03,-6,MB(0xffffff));box(.12,.05,23,35.5,.03,-6,MB(0xffffff));box(11,.05,.12,30,.03,-6,MB(0xffffff));
+box(11,.9,.05,30,.5,-6,MB(0xe5e7eb));box(.08,1,.08,24.5,.5,-6,dark);box(.08,1,.08,35.5,.5,-6,dark);
+cyl(13,.06,52,.02,-38,M(0x7bd05e),S,48);cyl(2.4,.07,45,.04,-33,M(0xe8d9a0),S,24);cyl(.9,.08,56,.05,-40,M(0x2e7d32),S,20);cyl(.04,3,56,1.5,-40,MB(0xdddddd));box(.9,.5,.02,56.5,2.8,-40,MB(0xdd2222));
+for(let i=0;i<34;i++){const x=18+Math.random()*60,z=20-Math.random()*100;if(x>22&&x<38&&z>-20&&z<8)continue;cyl(.2,2,x,1,z,M(0x5b3a1e));ball(1.3,x,3,z,M([0x2e7d32,0x388e3c,0x1b5e20][i%3]))}
+box(3,.06,60,19,0,-15,M(0xd8cdb5));
+for(let i=0;i<8;i++){cyl(.3,2,-12+i*3.4,1,20,M(0x5b3a1e));ball(1.4,-12+i*3.4,3,20,M(0x2e7d32))}
+
+/* ---------- camera / flow ---------- */
+const cam={p:new THREE.Vector3(0,1.7,19),l:new THREE.Vector3(0,1.5,0)},cur={p:cam.p.clone(),l:cam.l.clone()};
+const go=(p,l)=>{cam.p.set(...p);cam.l.set(...l)};let follow=0,mx=0,my=0,wave=0,gwave=0;
+addEventListener('pointermove',e=>{mx=e.clientX/innerWidth-.5;my=e.clientY/innerHeight-.5});
+function resize(){R.setSize(innerWidth,innerHeight);C.aspect=innerWidth/innerHeight;C.updateProjectionMatrix()}addEventListener('resize',resize);resize();
+const clock=new THREE.Clock();
+function loop(){requestAnimationFrame(loop);const dt=Math.min(clock.getDelta(),.1),t=clock.elapsedTime;
+ codeTex.offset.y=(t*.15)%1;
+ if(follow){const g=girl.position;cam.p.set(g.x*.5,1.75,g.z+follow*5.5);cam.l.set(g.x,1.5,g.z-follow*4)}
+ cur.p.lerp(cam.p,.035);cur.l.lerp(cam.l,.035);C.position.set(cur.p.x+mx*.5,cur.p.y+Math.sin(t*.8)*.02,cur.p.z);C.lookAt(cur.l.x+mx*3,cur.l.y-my*1.2,cur.l.z);
+ emps.forEach((p,i)=>{const u=p.userData;u.aL.rotation.x=-1.25+Math.sin(t*14+i*2)*.12;u.aR.rotation.x=-1.25+Math.sin(t*13+i*3)*.12;u.lL.rotation.x=u.lR.rotation.x=-1.57;p.children[1].rotation.y=Math.sin(t*.5+i)*.25});
+ {const u=ceo.userData;u.aL.rotation.x=-1.2+Math.sin(t*9)*.1;u.aR.rotation.x=-1.2+Math.sin(t*8)*.1;u.lL.rotation.x=u.lR.rotation.x=-1.57}
+ [G1,G2].forEach((g,i)=>{g.rotation.y=(i?-1:1)*.25+Math.sin(t*.7+i*2)*.15;const u=g.userData;u.aL.rotation.x=0;u.aR.rotation.z=(gwave>t&&i==0)?2.6+Math.sin(t*9)*.3:0;u.aR.rotation.x=0;u.aL.rotation.z=0});
+ // receptionist walking
+ const gu=girl.userData,gp=girl.position;let walking=false;
+ if(gu.path.length){const q=gu.path[0],dx=q[0]-gp.x,dz=q[1]-gp.z,d=Math.hypot(dx,dz);if(d<.2){gu.path.shift();if(!gu.path.length&&gu.cb){const f=gu.cb;gu.cb=null;f()}}else{gp.x+=dx/d*Math.min(d,dt*4.2);gp.z+=dz/d*Math.min(d,dt*4.2);girl.rotation.y=Math.atan2(dx,dz);walking=true}}else girl.rotation.y*=.9;
+ gu.lL.rotation.x=walking?Math.sin(t*9)*.6:0;gu.lR.rotation.x=walking?-Math.sin(t*9)*.6:0;gu.aL.rotation.x=walking?-Math.sin(t*9)*.5:0;
+ gu.aR.rotation.x=walking?Math.sin(t*9)*.5:0;gu.aR.rotation.z=(wave>t)?2.6+Math.sin(t*9)*.3:0;
+ (window.leds||[]).forEach((l,i)=>l.visible=Math.sin(t*6+i*7.3)>-.3);
+ cars.forEach(c=>{const u=c.userData,k=u.d*u.sp*dt;if(u.back){c.position.x+=k;if(c.position.x>110)c.position.x=-110;if(c.position.x<-110)c.position.x=110}else{c.position.z+=k;if(c.position.z>90)c.position.z=-110;if(c.position.z<-110)c.position.z=90}});
+ walkers.forEach((p,i)=>{const u=p.userData.w,k=u.d*u.sp*dt,a=Math.sin(t*7+i)*.6,r=p.userData;if(u.back){p.position.x+=k;if(Math.abs(p.position.x)>70)u.d*=-1;p.rotation.y=u.d>0?1.57:-1.57}else{p.position.z+=k;if(p.position.z>40||p.position.z<-70)u.d*=-1;p.rotation.y=u.d>0?0:Math.PI}
+  r.lL.rotation.x=a;r.lR.rotation.x=-a;r.aL.rotation.x=-a*.8;r.aR.rotation.x=a*.8});
+ R.render(S,C)}
+
+/* ---------- dialogue UI ---------- */
+let tw;function say(who,text,opts,after){$('#panel').style.display='none';$('#say').style.display='block';$('#who').textContent=who;const el=$('#txt'),o=$('#opts');o.innerHTML='';clearInterval(tw);let i=0;el.textContent='';
+ tw=setInterval(()=>{el.textContent=text.slice(0,++i);if(i>=text.length){clearInterval(tw);(opts||[]).forEach(([l,f,p])=>{const b=document.createElement('button');b.className='btn'+(p?' p':'');b.textContent=l;b.onclick=f;o.appendChild(b)});after&&after(o)}},18)}
+function panel(h){$('#say').style.display='none';const p=$('#panel');p.innerHTML=h;p.style.display='block';p.scrollTop=0}
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+let me=ls('ao_name')||'';
+
+$('#go').onclick=()=>{$('#intro').remove();go([0,1.7,12.8],[0,1.4,8]);setTimeout(()=>{if(me){save('visits',{name:me,returning:true});gwave=clock.elapsedTime+3;say('FBI Agent','Welcome back, '+me+'! Good to see you again at Ayon Tech HQ.',[['Continue →',reception,1],["I'm someone else",()=>{ls('ao_name','');me='';ask()}]])}else ask()},1500)};
+function ask(){gwave=clock.elapsedTime+3;say('FBI Agent','Stop right there — friendly security check! Welcome to Ayon Tech HQ. May I have your name, please?',null,o=>{o.innerHTML='<input id="nm" placeholder="Your name" maxlength="40"><button class="btn p" id="nb">That\'s me →</button>';const f=()=>{const v=$('#nm').value.trim();if(!v)return $('#nm').focus();me=v;ls('ao_name',v);save('visits',{name:v});say('FBI Agent','Thank you, '+v+'. You are cleared. Please proceed to reception, '+v+'.',[['Go to reception →',reception,1]])};$('#nb').onclick=f;$('#nm').onkeydown=e=>e.key=='Enter'&&f();$('#nm').focus()})}
+function reception(){follow=0;go([0,1.7,3.4],[0,1.5,-4]);wave=clock.elapsedTime+3;say('Receptionist · Sophia','Hello '+me+'! Welcome. I\'m Sophia. What would you like to see today?',[['💼 Project websites',()=>show('p')],['⚡ Skills',()=>show('s')],['👤 CEO details',()=>show('c')],['📅 Book / Hire the CEO',hire,1]])}
+const back='<p><button class="btn" onclick="reception()">← Back to reception</button></p>';
+function show(k){let h='';
+ if(k=='p')h='<h2>💼 Project websites</h2>'+PROJECTS.map(p=>`<div class="card"><b>${esc(p.n)}</b><br>${esc(p.d)}<br><a class="btn" target="_blank" rel="noopener" href="${esc(p.u)}">Open ↗</a></div>`).join('');
+ if(k=='s')h='<h2>⚡ Skills</h2>'+SKILLS.map(s=>`<div>${s[0]} — ${s[1]}%</div><div class="bar"><i style="width:${s[1]}%"></i></div>`).join('');
+ if(k=='c')h=`<h2>👤 ${esc(CEO.name)}</h2><p>Founder &amp; CEO — Web, Python &amp; Java developer.</p><a class="btn" href="tel:${CEO.phone}">📞 ${CEO.phone}</a><a class="btn" target="_blank" rel="noopener" href="https://wa.me/${CEO.wa}">💬 WhatsApp +${CEO.wa}</a><a class="btn" href="mailto:${CEO.mail}">✉️ ${CEO.mail}</a><a class="btn" target="_blank" rel="noopener" href="https://github.com/${CEO.gh}">🐙 GitHub</a><a class="btn" target="_blank" rel="noopener" href="${CEO.fb}">Facebook</a><a class="btn" target="_blank" rel="noopener" href="${CEO.ig}">Instagram</a>`;
+ panel(h+back)}
+function hire(){go([0,1.7,3.4],[0,1.5,-4]);say('Receptionist · Sophia','Wonderful, '+me+'! Please follow me — the CEO\'s office is at the very end.',null);const u=girl.userData;u.path=[[4.4,-4.4],[4.4,-30],[2.8,-35]];follow=1;
+ u.cb=()=>{follow=0;go([0,1.8,-28.5],[0,1.5,-40]);wave=clock.elapsedTime+3;say('Receptionist · Sophia','Here we are! The CEO is ready for you. Please leave your details.',null);setTimeout(form,1800)}}
+function form(){panel(`<h2>📅 Meet the CEO</h2><p>Hi ${esc(me)}, tell ${esc(CEO.name)} what you need.</p>
+<label>Your email *</label><input id="fe" type="email" placeholder="you@example.com">
+<label>Phone / WhatsApp</label><input id="fp" placeholder="+880…">
+<label>I need</label><select id="ft"><option>Hire an employee</option><option>A project / website</option><option>Book a meeting with the CEO</option><option>Other</option></select>
+<label>Project / role details</label><textarea id="fm" rows="3" placeholder="Describe what you need, budget, deadline…"></textarea>
+<button class="btn p" id="fs">Send to CEO →</button> <button class="btn" id="fb">← Back to reception</button><div id="fr"></div>`);
+ $('#fb').onclick=()=>{panel('');$('#panel').style.display='none';say('Receptionist · Sophia','Of course, let me walk you back.',null);const u=girl.userData;u.path=[[4.4,-30],[4.4,-4.4],[0,-4.4]];follow=-1;u.cb=reception};
+ $('#fs').onclick=()=>{const e=$('#fe').value.trim();if(!/^\S+@\S+\.\S+$/.test(e))return $('#fr').innerHTML='<p>Please enter a valid email.</p>';
+  const d={name:me,email:e,phone:$('#fp').value.trim(),need:$('#ft').value,msg:$('#fm').value.trim()};save('hires',d);
+  const txt=`Hi ${CEO.name}, I'm ${d.name}. I need: ${d.need}. ${d.msg} (Email: ${d.email}${d.phone?', Phone: '+d.phone:''})`;
+  $('#fr').innerHTML=`<div class="card">✅ Request saved, ${esc(me)}! To reach the CEO instantly, also send it directly:<br><a class="btn p" target="_blank" rel="noopener" href="https://wa.me/${CEO.wa}?text=${encodeURIComponent(txt)}">Send via WhatsApp</a><a class="btn" href="mailto:${CEO.mail}?subject=${encodeURIComponent('Hire request from '+d.name)}&body=${encodeURIComponent(txt)}">Send via Email</a></div>`}}
+
+/* ---------- admin portal ---------- */
+async function sha(s){const b=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(s));return[...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,'0')).join('')}
+$('#adm').onclick=()=>{panel('<h2>🔒 Admin portal</h2><input id="ap" type="password" placeholder="Password"><button class="btn p" id="al">Unlock</button> <button class="btn" id="ac">Close</button><div id="ae"></div>');
+ $('#ac').onclick=()=>{$('#panel').style.display='none';if(me)$('#say').style.display='block'};
+ const f=async()=>{let ok=false;try{ok=(await sha($('#ap').value))===ADMIN_HASH}catch(e){}if(!ok)return $('#ae').textContent='Wrong password.';admin()};$('#al').onclick=f;$('#ap').onkeydown=e=>e.key=='Enter'&&f()};
+async function rows(k){let a=[];try{a=JSON.parse(ls('ao_'+k)||'[]')}catch(e){}
+ try{if(DB){const s=await DB.collection(k).get();s.docs.forEach(d=>a.push(d.data()))}}catch(e){}
+ const seen=new Set();return a.filter(r=>{const id=r.t+r.name;if(seen.has(id))return false;seen.add(id);return true}).sort((x,y)=>y.t-x.t)}
+async function admin(){const v=await rows('visits'),h=await rows('hires'),dt=t=>new Date(t).toLocaleString();
+ panel(`<h2>🛠 Admin portal</h2><h3>Hire / booking requests (${h.length})</h3>`+(h.map(r=>`<div class="card"><b>${esc(r.name)}</b> — ${esc(r.need)}<br>✉️ ${esc(r.email)} ${r.phone?'· 📞 '+esc(r.phone):''}<br>${esc(r.msg||'')}<br><small>${dt(r.t)}</small></div>`).join('')||'<p>None yet.</p>')+
+ `<h3>Visitors (${v.length})</h3><div class="tbl">`+(v.map(r=>`<div>${esc(r.name)}${r.returning?' (returning)':''} — <small>${dt(r.t)}</small></div>`).join('')||'<p>None yet.</p>')+`</div><p><button class="btn" id="ac2">Close</button></p>`);
+ $('#ac2').onclick=()=>{$('#panel').style.display='none'}}
+
+$('#ld').remove();$('#intro').style.display='flex';
+const lc=(a,b)=>{};R.setClearColor(0x9fd0f5);C.position.copy(cur.p);loop();
+</script></body></html>
